@@ -79,7 +79,3 @@ g++ -std=c++17 -Iinclude src/client_main.cpp src/chat_client.cpp src/logger.cpp 
 - `/list` shows active users.
 - `/quit` exits the client.
 
-## Resume Bullet
-
-- Built a **multi-client TCP socket chat system** using **C++**, **POSIX sockets**, and **multithreading**, demonstrating real-time client-server communication and systems programming fundamentals.
-- Implemented **structured logging**, modular architecture, and Linux-friendly build workflows to improve maintainability, debugging, and interview readiness for networking-focused software roles.
