@@ -279,4 +279,4 @@ This project demonstrates:
 
 ## License
 
-This project is open for learning and portfolio use. Add an MIT License if you want to make it formally reusable.
+This project is open for learning and portfolio use.
