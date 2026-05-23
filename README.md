@@ -1,6 +1,6 @@
 # C++ TCP Socket Chat System
 
-A production-style **client-server chat application** built with **C++17**, **POSIX sockets**, and **multithreading**. This project is tailored for **Ciena-style software/networking roles** because it demonstrates TCP/IP communication, concurrency, Linux-friendly development, structured logging, modular code, and clean engineering practices.
+A production-style **client-server chat application** built with **C++17**, **POSIX sockets**, and **multithreading**. This project demonstrates TCP/IP communication, concurrency, Linux-friendly development, structured logging, modular code, and clean engineering practices.
 
 ## Features
 
