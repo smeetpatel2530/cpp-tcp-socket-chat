@@ -17,7 +17,7 @@ A production-style **client-server chat application** built with **C++17**, **PO
 ## Project Structure
 
 ```bash
-ciena_socket_chat_complete/
+cpp_tcp_socket_chat/
 ├── CMakeLists.txt
 ├── README.md
 ├── assets/
