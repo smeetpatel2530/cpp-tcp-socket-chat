@@ -1,17 +1,13 @@
-name: C++ CI
+name: C++ CI (Ubuntu)
 
-on:
-  push:
-  pull_request:
+on: [push, pull_request]
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install build tools
+      - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y cmake g++
-      - name: Configure
-        run: mkdir build && cd build && cmake ..
       - name: Build
-        run: cd build && make
+        run: mkdir build && cd build && cmake .. && make
