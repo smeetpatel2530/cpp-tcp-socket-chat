@@ -12,5 +12,5 @@ public:
 private:
     void log(const std::string& level, const std::string& msg);
     std::ofstream file_;
-    std::mutex mutex_;
+    std::mutex    mutex_;
 };
