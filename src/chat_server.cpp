@@ -1,71 +1,80 @@
 #include "chat_server.hpp"
 #include "utils.hpp"
-#include <arpa/inet.h>
 #include <cstring>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include <stdexcept>
 
 namespace { constexpr int BUFFER_SIZE = 2048; }
 
 ChatServer::ChatServer(int port, const std::string& log_file)
-    : port_(port), server_fd_(-1), running_(false), logger_(log_file) {}
+    : port_(port), server_fd_(INVALID_SOCK), running_(false), logger_(log_file) {}
 
 ChatServer::~ChatServer() { stop(); }
 
 void ChatServer::start() {
+    init_sockets();
+
     server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd_ < 0) throw std::runtime_error("Failed to create server socket");
+    if (server_fd_ == INVALID_SOCK)
+        throw std::runtime_error("Failed to create server socket: " + std::to_string(sock_error()));
 
     int opt = 1;
-    setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR,
+               reinterpret_cast<const char*>(&opt), sizeof(opt));
 
     sockaddr_in server_addr{};
-    server_addr.sin_family = AF_INET;
+    server_addr.sin_family      = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(port_);
+    server_addr.sin_port        = htons(static_cast<u_short>(port_));
 
-    if (bind(server_fd_, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr)) < 0)
-        throw std::runtime_error("Bind failed");
-    if (listen(server_fd_, 10) < 0)
-        throw std::runtime_error("Listen failed");
+    if (bind(server_fd_, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr)) != 0)
+        throw std::runtime_error("Bind failed: " + std::to_string(sock_error()));
+    if (listen(server_fd_, 10) != 0)
+        throw std::runtime_error("Listen failed: " + std::to_string(sock_error()));
 
     running_ = true;
-    logger_.info("Server started on port " + std::to_string(port_));
+    logger_.info("Server listening on port " + std::to_string(port_));
+    logger_.info("Waiting for clients...");
     accept_loop();
 }
 
 void ChatServer::stop() {
     if (!running_) return;
     running_ = false;
-    if (server_fd_ >= 0) close(server_fd_);
+    if (server_fd_ != INVALID_SOCK) close_sock(server_fd_);
     {
         std::lock_guard<std::mutex> lock(clients_mutex_);
-        for (auto& [fd, client] : clients_) close(fd);
+        for (auto& [fd, client] : clients_) close_sock(fd);
         clients_.clear();
     }
-    for (auto& worker : workers_) if (worker.joinable()) worker.join();
+    for (auto& w : workers_) if (w.joinable()) w.join();
+    cleanup_sockets();
     logger_.info("Server stopped");
 }
 
 void ChatServer::accept_loop() {
     while (running_) {
         sockaddr_in client_addr{};
-        socklen_t len = sizeof(client_addr);
-        int client_fd = accept(server_fd_, reinterpret_cast<sockaddr*>(&client_addr), &len);
-        if (client_fd < 0) continue;
-        std::string ip = inet_ntoa(client_addr.sin_addr);
-        logger_.info("Incoming connection from " + ip);
-        workers_.emplace_back(&ChatServer::handle_client, this, client_fd, ip);
+        socklen_t   len = sizeof(client_addr);
+        socket_t client_fd = accept(server_fd_,
+                                    reinterpret_cast<sockaddr*>(&client_addr), &len);
+        if (client_fd == INVALID_SOCK) continue;
+
+        char ip[INET_ADDRSTRLEN]{};
+        inet_ntop(AF_INET, &client_addr.sin_addr, ip, sizeof(ip));
+        std::string client_ip(ip);
+        logger_.info("New connection from " + client_ip);
+
+        workers_.emplace_back(&ChatServer::handle_client, this, client_fd, client_ip);
     }
 }
 
-void ChatServer::handle_client(int client_fd, std::string client_addr) {
-    char buffer[BUFFER_SIZE];
-    std::string username = "guest-" + std::to_string(client_fd);
+void ChatServer::handle_client(socket_t client_fd, std::string client_addr) {
+    char buffer[BUFFER_SIZE]{};
+    std::string username = "guest-" + std::to_string((int)client_fd);
 
+    // First message must be "USER <name>"
     int bytes = recv(client_fd, buffer, BUFFER_SIZE - 1, 0);
-    if (bytes <= 0) { close(client_fd); return; }
+    if (bytes <= 0) { close_sock(client_fd); return; }
     buffer[bytes] = '\0';
     std::string intro = trim(buffer);
     if (intro.rfind("USER ", 0) == 0) username = trim(intro.substr(5));
@@ -75,7 +84,7 @@ void ChatServer::handle_client(int client_fd, std::string client_addr) {
         clients_[client_fd] = {client_fd, username, client_addr};
     }
 
-    send_to_client(client_fd, "[server] Welcome " + username + "\n");
+    send_to_client(client_fd, "[server] Welcome, " + username + "!\n");
     broadcast("[server] " + username + " joined from " + client_addr + "\n", client_fd);
     logger_.info(username + " joined from " + client_addr);
 
@@ -87,11 +96,12 @@ void ChatServer::handle_client(int client_fd, std::string client_addr) {
         std::string msg = trim(buffer);
         if (msg.empty()) continue;
         if (msg == "/quit") break;
+
         if (msg == "/list") {
-            std::string users = "[server] Active users: ";
+            std::string users = "[server] Online users: ";
             std::lock_guard<std::mutex> lock(clients_mutex_);
             bool first = true;
-            for (const auto& [fd, info] : clients_) {
+            for (auto& [fd, info] : clients_) {
                 if (!first) users += ", ";
                 users += info.username;
                 first = false;
@@ -100,31 +110,32 @@ void ChatServer::handle_client(int client_fd, std::string client_addr) {
             send_to_client(client_fd, users);
             continue;
         }
+
         std::string formatted = "[" + username + "] " + msg + "\n";
         broadcast(formatted, client_fd);
         send_to_client(client_fd, formatted);
-        logger_.info("message from " + username + ": " + msg);
+        logger_.info(username + ": " + msg);
     }
 
-    broadcast("[server] " + username + " left the chat\n", client_fd);
+    broadcast("[server] " + username + " left the chat.\n", client_fd);
     logger_.warn(username + " disconnected");
     remove_client(client_fd);
-    close(client_fd);
+    close_sock(client_fd);
 }
 
-void ChatServer::broadcast(const std::string& message, int exclude_fd) {
+void ChatServer::broadcast(const std::string& message, socket_t exclude_fd) {
     std::lock_guard<std::mutex> lock(clients_mutex_);
-    for (const auto& [fd, client] : clients_) {
+    for (auto& [fd, client] : clients_) {
         if (fd == exclude_fd) continue;
-        send(fd, message.c_str(), message.size(), 0);
+        send(fd, message.c_str(), static_cast<int>(message.size()), 0);
     }
 }
 
-void ChatServer::send_to_client(int client_fd, const std::string& message) {
-    send(client_fd, message.c_str(), message.size(), 0);
+void ChatServer::send_to_client(socket_t client_fd, const std::string& message) {
+    send(client_fd, message.c_str(), static_cast<int>(message.size()), 0);
 }
 
-void ChatServer::remove_client(int client_fd) {
+void ChatServer::remove_client(socket_t client_fd) {
     std::lock_guard<std::mutex> lock(clients_mutex_);
     clients_.erase(client_fd);
 }
