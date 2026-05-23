@@ -175,8 +175,6 @@ This project demonstrates practical knowledge of:
 - **Structured logging and debugging**
 - **Clean modular code organization**
 
-It is a strong project for roles focused on **networking**, **systems software**, and **C++ development**, especially for companies like **Ciena**.
-
 ---
 
 ## Future Improvements
