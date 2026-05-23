@@ -2,7 +2,7 @@
 
 A production-style **multi-client chat application** built with **C++17**, **TCP/IP sockets**, and **multithreading** — compatible with both **Windows (Winsock2)** and **Linux (POSIX)**.
 
-Built to demonstrate key skills for **Ciena-style networking and software engineering roles**: systems-level C++ programming, TCP client-server architecture, concurrency, structured logging, and clean modular code.
+Built to demonstrate key skills: systems-level C++ programming, TCP client-server architecture, concurrency, structured logging, and clean modular code.
 
 ---
 
