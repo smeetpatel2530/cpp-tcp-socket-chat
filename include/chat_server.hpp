@@ -1,5 +1,6 @@
 #pragma once
 #include "logger.hpp"
+#include "platform.hpp"
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -8,7 +9,7 @@
 #include <vector>
 
 struct ClientInfo {
-    int socket_fd;
+    socket_t    socket_fd;
     std::string username;
     std::string address;
 };
@@ -21,16 +22,16 @@ public:
     void stop();
 private:
     void accept_loop();
-    void handle_client(int client_fd, std::string client_addr);
-    void broadcast(const std::string& message, int exclude_fd = -1);
-    void send_to_client(int client_fd, const std::string& message);
-    void remove_client(int client_fd);
+    void handle_client(socket_t client_fd, std::string client_addr);
+    void broadcast(const std::string& message, socket_t exclude_fd = INVALID_SOCK);
+    void send_to_client(socket_t client_fd, const std::string& message);
+    void remove_client(socket_t client_fd);
 
-    int port_;
-    int server_fd_;
+    int              port_;
+    socket_t         server_fd_;
     std::atomic<bool> running_;
-    Logger logger_;
-    std::mutex clients_mutex_;
-    std::unordered_map<int, ClientInfo> clients_;
+    Logger           logger_;
+    std::mutex       clients_mutex_;
+    std::unordered_map<socket_t, ClientInfo> clients_;
     std::vector<std::thread> workers_;
 };
